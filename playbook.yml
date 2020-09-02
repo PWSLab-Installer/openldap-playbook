@@ -1,0 +1,69 @@
+- hosts: localhost
+  connection: local
+
+  vars:
+    openldap_config: true
+
+
+  tasks:
+      
+    -   name: Check the version of release
+        command: hostnamectl
+        register: os_check
+        ignore_errors: yes
+
+    - name: Install Role OpenLDAP
+      local_action: command ansible-galaxy install -f mrlesmithjr.openldap
+
+    - name: Applying role OpenLDAP
+      command: mv ~/.ansible/roles/mrlesmithjr.openldap ~/.ansible/roles/pwslab.openldap
+      ignore_errors: yes
+
+    -   name: Absent the Irrelevant files - Ubuntu 20
+        file:
+          path: /etc/apt/sources.list.d/ansible-ubuntu-ansible-focal.list
+          state: absent
+        when:
+          - os_check.stdout | regex_search("Ubuntu 20")
+
+    -   name: Installing OpenLDAP
+        include_role:
+              name: pwslab.openldap
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Install OpenLDAP - CentOS 7
+        yum:
+            name: "{{ item }}"
+            state: present
+        loop:
+            - openldap 
+            - openldap-servers
+        when:
+            - os_check.stdout | regex_search("CentOS Linux 7")
+
+    -   name: Get the repo - CentOS 8
+        get_url:
+            url: https://repo.symas.com/configs/SOFL/rhel8/sofl.repo 
+            dest: /etc/yum.repos.d/sofl.repo
+        when:
+            - os_check.stdout | regex_search("CentOS Linux 8")
+
+    -   name: Install OpenLDAP - CentOS 8
+        yum:
+            name: "{{ item }}"
+            state: present
+        loop:
+            - *
+            - symas-openldap-clients 
+            - symas-openldap-servers 
+        when:
+            - os_check.stdout | regex_search("CentOS Linux 8")
+
+    -   name: Start OpenLDAP
+        systemd:
+            name: slapd
+            enabled: yes
+            state: started
+        when:
+            - os_check.stdout | regex_search("CentOS")
